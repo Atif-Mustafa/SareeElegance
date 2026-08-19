@@ -66,10 +66,10 @@ The application follows a decoupled full-stack architecture:
 ### 3.1 Design Principles
 - **Composition Over Inheritance**: Components are structured as modular, self-contained functional blocks.
 - **Strict Separation of Concerns**:
-  - **Presentational Components**: Pure UI components styled with Tailwind CSS (`/src/components`).
-  - **Custom Hooks**: Encapsulate reusable logic and side effects (`/src/hooks`).
+  - **Presentational Components**: Pure UI components styled with Tailwind CSS (`client/src/components`).
+  - **Custom Hooks**: Encapsulate reusable logic and side effects (`client/src/hooks`).
   - **Server State**: Managed exclusively by **TanStack Query** with automated cache invalidation.
-  - **Client State**: Managed by **Zustand** for UI preferences, drawer states, and user sessions.
+  - **Client State**: Managed by **Zustand** for UI preferences, drawer states, and user sessions (`client/src/store`).
 
 ### 3.2 Performance Optimization
 - **Code Splitting & Lazy Loading**: Route-level and component-level code splitting via React 19 `React.lazy` and Suspense.
@@ -82,16 +82,16 @@ The application follows a decoupled full-stack architecture:
 
 ### 4.1 Layered Clean Architecture
 Our backend isolates responsibilities into distinct architectural layers:
-1. **Controllers (`/src/server/controllers`)**:
+1. **Controllers (`server/src/controllers`)**:
    - Handle incoming HTTP requests and responses.
    - Perform request schema validation using **Zod**.
    - Delegate business logic entirely to the Service Layer.
-2. **Services (`/src/server/services`)**:
+2. **Services (`server/src/services`)**:
    - Contain domain and business logic (e.g., pricing rules, tax calculations, order fulfillment).
    - Independent of HTTP transport details.
-3. **Data Access Layer / Prisma ORM (`/src/server/db`)**:
+3. **Data Access Layer / Prisma ORM (`server/src/db` / `prisma/`)**:
    - Executes parameterized queries against PostgreSQL.
-   - Implements repositories and transactional boundaries.
+   - Implements repositories and transactional boundaries. (Note: `prisma/` directory is reserved for future database schema & migration files).
 
 ### 4.2 Caching & Async Processing
 - **Redis Caching**: Caches high-frequency read endpoints (e.g., product catalogs, localization dictionaries, exchange rates) with configurable TTLs.
@@ -139,8 +139,8 @@ To prevent enterprise complexity from eroding architectural boundaries, the back
 ### 6.1 Core Bounded Contexts & Aggregate Roots
 1. **Catalog & Merchandising Context**
    - **Aggregate Root**: `Product` (Saree SKU).
-   - **Entities & Value Objects**: `ProductVariant`, `ProductImage`, `ProductAttribute`, `SilkMarkLicense`, `ZariPurityGrade`.
-   - **Responsibility**: Curating saree storytelling, weaving specifications, regional cluster profiles, and pricing tiers.
+   - **Entities & Value Objects**: `SareeDetails`, `ProductMedia`, `ProductColor`, `ProductOccasion`, `Category`.
+   - **Responsibility**: Curating saree storytelling, weaving specifications, regional cluster profiles, and pricing tiers. Catalog is strictly decoupled from inventory.
 2. **Inventory & Warehouse Context**
    - **Aggregate Root**: `Inventory` & `Warehouse`.
    - **Entities**: `InventoryTransaction`, `StockHoldReservation`.
@@ -159,7 +159,7 @@ To prevent enterprise complexity from eroding architectural boundaries, the back
    - **Responsibility**: Maintaining live currency conversion ledgers and regional GST/VAT tax percentages.
 
 ### 6.2 Context Integration & Anti-Corruption Layers (ACL)
-- **Shared Kernel**: Zod domain schemas (`/src/shared/schemas`) act as the shared contract across contexts.
+- **Shared Kernel**: Zod domain schemas (`/shared/schemas`) act as the shared contract across contexts.
 - **Anti-Corruption Layer (ACL)**: When the OMS interacts with external payment gateways (Stripe, Razorpay) or logistics providers (DHL, Blue Dart), an ACL adapter translates external payloads into internal domain entities to prevent external model leakage.
 
 ---
@@ -194,3 +194,10 @@ All domain events follow a versioned JSON schema wrapped in a standardized event
 ### 7.2 Transactional Outbox Pattern & Idempotency
 - **Transactional Outbox**: To guarantee at-least-once delivery without distributed transactions, domain mutations write event records to a PostgreSQL `OutboxMessage` table within the same ACID database transaction. A background worker polls and publishes outbox messages to BullMQ.
 - **Idempotency Keys**: Consumers enforce idempotent processing by recording `eventId` signatures in Redis (`idempotency:event:{eventId}`). Duplicate webhooks or re-delivered queue jobs are discarded silently without duplicating emails or inventory subtractions.
+
+## Frontend Data Fetching (Catalog)
+The storefront catalog reads strictly from the backend APIs (`/api/v1/products`, `/api/v1/categories`) using native `fetch` encapsulated in `catalogApi`.
+- **API-Driven**: No mock data is used for runtime storefront listing or detail pages.
+- **Production API Routing Expectation**: The Vite proxy is development-only. In production, the application expects a same-origin reverse proxy (e.g., Nginx) that routes `/api/*` to the Node.js backend and all other requests to the static frontend bundle.
+- **Money Handling Boundary**: The API serves exact money as a string (minor units). The frontend mapper preserves this as `priceMinor` and `currency`.
+- **Zustand Scope**: Store state is restricted to client interactions (cart, UI toggles). Catalog data is fetched dynamically.

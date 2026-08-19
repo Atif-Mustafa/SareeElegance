@@ -23,9 +23,9 @@ All code must conform to the following engineering principles:
 ## 2. Reuse Before Create (Mandatory Rule)
 
 Before creating any new component, hook, utility, or backend service:
-1. **Search existing components** in `/src/components/ui/` and `/src/components/layout/`.
-2. **Check existing hooks** in `/src/hooks/` and `/src/store/`.
-3. **Check existing utilities and types** in `/src/lib/`, `/src/utils/`, and `/src/types.ts`.
+1. **Search existing components** in `client/src/components/ui/` and `client/src/components/layout/`.
+2. **Check existing hooks** in `client/src/hooks/` and `client/src/store/`.
+3. **Check existing utilities and types** in `client/src/lib/`, `client/src/utils/`, and `client/src/types.ts`.
 4. If an existing module fulfills 80% of your requirement, **extend it** via optional props or composition rather than duplicating code.
 
 ---

@@ -2,6 +2,91 @@
 
 This document defines the REST API standards, endpoint structure, authentication protocol, and error handling for all backend Express.js microservices.
 
+
+### Cart Validation Endpoint
+
+**`POST /api/v1/cart/validate`**
+Stateless validation of cart intents against authoritative catalog pricing. 
+(Replaces reliance on frontend `priceINR` derivatives.)
+
+#### Request
+```json
+{
+  "lines": [
+    {
+      "productId": "uuid",
+      "quantity": 2
+    }
+  ]
+}
+```
+
+#### Response (Success)
+```json
+{
+  "success": true,
+  "data": {
+    "valid": true,
+    "lines": [
+      {
+        "productId": "uuid",
+        "sku": "SR-001",
+        "slug": "example-saree",
+        "name": "Example Saree",
+        "quantity": 2,
+        "unitPrice": {
+          "amountMinor": "250000",
+          "currency": "INR"
+        },
+        "lineSubtotal": {
+          "amountMinor": "500000",
+          "currency": "INR"
+        },
+        "status": "VALID"
+      }
+    ],
+    "totals": {
+      "subtotal": {
+        "amountMinor": "500000",
+        "currency": "INR"
+      }
+    }
+  },
+  "meta": {
+    "timestamp": "...",
+    "requestId": "..."
+  }
+}
+```
+
+#### Response (Validation Failure - Mixed Currency)
+```json
+{
+  "success": true,
+  "data": {
+    "valid": false,
+    "reason": "CART_CURRENCY_MISMATCH",
+    "lines": [ ... ],
+    "totals": {
+      "subtotal": { "amountMinor": "0", "currency": "INR" }
+    }
+  }
+}
+```
+
+#### Response (Infrastructure Failure - Database Unreachable)
+```json
+{
+  "type": "about:blank",
+  "title": "Service Unavailable",
+  "status": 503,
+  "code": "INFRA_001",
+  "detail": "Unable to verify current cart total.",
+  "instance": "/api/v1/cart/validate",
+  "requestId": "req-12345"
+}
+```
+
 ---
 
 ## 1. Core API Principles
@@ -21,8 +106,11 @@ This document defines the REST API standards, endpoint structure, authentication
   "data": {
     "id": "c81d4e2e-bcf2-11ee-a506-0242ac120002",
     "name": "Banarasi Katan Silk Saree",
-    "price": 14500.00,
-    "currency": "INR"
+    "price": {
+      "amountMinor": "1450000",
+      "currency": "INR"
+    },
+    
   },
   "meta": {
     "timestamp": "2026-08-02T03:15:00.000Z"
@@ -52,24 +140,42 @@ This document defines the REST API standards, endpoint structure, authentication
 ### 2.3 Standard Error Response (`400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `500 Server Error`)
 ```json
 {
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Invalid ISO language code provided.",
-    "details": [
-      {
-        "field": "locale",
-        "message": "Must be a valid 2-character ISO 639-1 code."
-      }
-    ]
-  },
-  "timestamp": "2026-08-02T03:15:00.000Z"
+  "type": "about:blank",
+  "title": "Validation Error",
+  "status": 400,
+  "code": "VALIDATION_001",
+  "detail": "Input payload failed Zod schema validation.",
+  "instance": "/api/v1/localization/translations/invalid",
+  "requestId": "req-12345"
 }
 ```
 
 ---
 
-## 3. Localization & Currency Endpoints
+
+## 3. Catalog Endpoints (Read-Only)
+
+### 3.1 Get Active Products
+- **Method / Path**: `GET /api/v1/products`
+- **Description**: Returns a paginated list of active products in the catalog.
+- **Parameters**: 
+  - `page` (default 1)
+  - `limit` (default 24)
+  - `category`, `fabric`, `weave`, `region`, `color`, `occasion`, `minPriceMinor`, `maxPriceMinor`
+  - `sort` (newest, price_asc, price_desc, name_asc)
+- **Response**: Paginated list of `CatalogProductSummary` DTOs. BigInt prices are returned as strings.
+
+### 3.2 Get Product Details
+- **Method / Path**: `GET /api/v1/products/:slug`
+- **Description**: Returns the full `CatalogProductDetail` DTO for a specific active product by its slug.
+- **Response**: `CatalogProductDetail`. Returns 404 for DRAFT, ARCHIVED, or unknown products.
+
+### 3.3 Get Active Categories
+- **Method / Path**: `GET /api/v1/categories`
+- **Description**: Returns all active categories.
+- **Response**: List of `CatalogCategoryDto`.
+
+## 4. Localization & Currency Endpoints
 
 ### 3.1 Get Localization Config
 - **Method / Path**: `GET /api/v1/localization/config`
@@ -238,3 +344,85 @@ Endpoints returning heavily read, rarely mutated data (e.g., Localization, CMS B
 - `ETag` / `If-None-Match`: The server calculates a hash of the response. If it matches the client's `If-None-Match`, it returns `304 Not Modified`.
 - `Cache-Control`: Specifies TTL (`public, max-age=300`).
 - `Vary`: Specifies headers that affect the response (e.g., `Vary: Accept-Language`).
+
+## 11. Inventory & Warehouse Endpoints
+### 11.1 Check Inventory Availability
+- **Method / Path**: `GET /api/v1/inventory/:productId/availability`
+- **Description**: Returns real-time inventory availability for a specific product.
+- **Response**: `InventoryAvailabilityDto`.
+
+### 11.2 Reserve Inventory
+- **Method / Path**: `POST /api/v1/inventory/reserve`
+- **Description**: Places a temporary hold (reservation) on inventory items for a checkout flow. Uses atomic locking.
+- **Request Body**: `ReserveInventoryRequest` (productId, quantity, ttlSeconds).
+- **Response**: `InventoryReservationDto`.
+- **Idempotency**: Strongly recommended using `Idempotency-Key` or by explicitly handling the returned `reservationId`.
+
+### 11.3 Release Inventory Reservation
+- **Method / Path**: `POST /api/v1/inventory/reservations/:reservationId/release`
+- **Description**: explicitly releases a reservation before its TTL expires (e.g., user abandoned checkout).
+- **Response**: `{ success: true }`.
+
+## 12. Order Endpoints (Post-Payment Lifecycle)
+### 12.1 Get Order (Secure Guest Retrieval)
+`GET /api/v1/orders/:orderId?accessToken=<opaque_token>`
+Retrieves the authoritative order state, requiring the `accessToken` that was issued upon successful checkout session finalization.
+**Response (Success)**
+```json
+{
+  "data": {
+    "id": "ord_...",
+    "checkoutSessionId": "cs_...",
+    "status": "CONFIRMED",
+    "currency": "INR",
+    "paymentStatus": "PAID",
+    "subtotal": "55000.00",
+    "taxTotal": "0",
+    "shippingTotal": "0",
+    "total": "55000.00",
+    "accessToken": "tok_123456789",
+    "lines": [...],
+    "history": [...],
+    "createdAt": "2026-08-18T10:00:00Z"
+  }
+}
+```
+
+### 12.2 Cancel Order
+`POST /api/v1/orders/:orderId/cancel`
+Cancels an order if it is in `PAYMENT_PENDING` or `CONFIRMED` state. Requires `accessToken` via query string or `x-order-token` header. Note: The database now securely stores a SHA-256 hash of the token; the raw token is returned exactly once during order confirmation. Exact rollback of consumed inventory is performed atomically.
+
+### 12.3 Prepare Fulfillment
+`POST /api/v1/orders/:orderId/prepare-fulfillment`
+Transitions the order from `CONFIRMED` to `READY_FOR_FULFILLMENT` and locks out future cancellations. Emits a `FulfillmentHandoff` record. Requires `accessToken` via query string or `x-order-token` header.
+
+### 12.4 Get Order Shipment Tracking
+`GET /api/v1/orders/:orderId/shipment`
+Retrieves shipment status and tracking details for a specific order. Requires `accessToken` via query string or `x-order-token` header.
+**Response (Success)**
+```json
+{
+  "id": "shp_123...",
+  "orderId": "ord_...",
+  "provider": "MockProvider",
+  "trackingNumber": "AWB12345678",
+  "status": "DISPATCHED",
+  "shippingAddress": { ... },
+  "dispatchedAt": "2026-08-19T10:00:00Z",
+  "deliveredAt": null,
+  "createdAt": "2026-08-19T09:00:00Z"
+}
+```
+
+### 12.5 Shipping Provider Webhook
+`POST /api/v1/shipping/webhook`
+Receives asynchronous shipping events from the external provider.
+Requires `x-shipping-signature` header for HMAC verification.
+```json
+{
+  "providerShipmentId": "shp_123",
+  "status": "DELIVERED",
+  "timestamp": "2026-08-19T12:00:00Z",
+  "eventId": "evt_abc123"
+}
+```

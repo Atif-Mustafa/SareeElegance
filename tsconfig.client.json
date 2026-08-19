@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+    "allowJs": true,
+    "moduleResolution": "bundler",
+    "paths": {
+      "@/*": ["./client/src/*"],
+      "@client/*": ["./client/src/*"],
+      "@shared/*": ["./shared/*"]
+    }
+  },
+  "include": [
+    "client/src/**/*",
+    "shared/**/*"
+  ],
+  "exclude": ["server/**/*", "node_modules"]
+}

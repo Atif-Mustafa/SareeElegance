@@ -1,0 +1,418 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model Category {
+  id          String  @id @default(uuid())
+  name        String
+  slug        String  @unique
+  description String?
+  isActive    Boolean @default(true)
+
+  parentCategoryId String?
+  parentCategory   Category?  @relation("CategoryHierarchy", fields: [parentCategoryId], references: [id])
+  childCategories  Category[] @relation("CategoryHierarchy")
+
+  products Product[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([slug])
+  @@index([parentCategoryId])
+}
+
+model Product {
+  id               String @id @default(uuid())
+  sku              String @unique
+  slug             String @unique
+  name             String
+  shortDescription String
+  longDescription  String
+
+  status ProductStatus @default(DRAFT)
+
+  // Canonical Price
+  priceMinor BigInt
+  currency   String
+
+  // SEO Metadata
+  seoTitle       String?
+  seoDescription String?
+
+  // Relations
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id])
+
+  sareeDetails SareeDetails?
+  media        ProductMedia[]
+  inventory    Inventory?
+
+  // Merchandising tags
+  occasions ProductOccasion[]
+  colors    ProductColor[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([categoryId])
+  @@index([createdAt])
+}
+
+model SareeDetails {
+  id        String  @id @default(uuid())
+  productId String  @unique
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Fabric and Weave Information
+  fabric   String
+  weave    String
+  zariType String?
+  motif    String?
+
+  // Region and Origin
+  region String?
+
+  // Artisan Information
+  artisanName  String?
+  artisanStory String?
+
+  // Certifications (e.g., Silk Mark)
+  certificateType    String?
+  certificateNumber  String?
+  issuer             String?
+  verificationStatus String?
+  verifiedAt         DateTime?
+  verificationUrl    String?
+
+  // Textile specifications
+  length      String?
+  width       String?
+  blousePiece String?
+  washCare    String?
+  weightGrams Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([fabric])
+  @@index([weave])
+}
+
+model ProductMedia {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  mediaType String // 'IMAGE' | 'VIDEO'
+  url       String
+  altText   String?
+  isPrimary Boolean @default(false)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId, isPrimary])
+}
+
+model ProductColor {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  name    String
+  hexCode String
+
+  @@index([productId])
+}
+
+model ProductOccasion {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  name String // e.g., 'Wedding', 'Festive'
+
+  @@index([productId])
+  @@index([name])
+}
+
+model Inventory {
+  id        String   @id @default(uuid())
+  productId String   @unique
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  onHand    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  reservations Reservation[]
+
+  @@index([productId])
+}
+
+enum ReservationStatus {
+  ACTIVE
+  RELEASED
+  EXPIRED
+  CONSUMED
+  RESTORED
+}
+
+model Reservation {
+  id           String            @id @default(uuid())
+  inventoryId  String
+  inventory    Inventory         @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  quantity     Int
+  status       ReservationStatus @default(ACTIVE)
+  expiresAt    DateTime
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  checkoutLine CheckoutLine?
+
+  @@index([inventoryId])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+enum CheckoutStatus {
+  OPEN
+  EXPIRED
+  CANCELLED
+  COMPLETED
+}
+
+model CheckoutSession {
+  id             String         @id @default(uuid())
+  idempotencyKey String         @unique
+  status         CheckoutStatus @default(OPEN)
+  currency       String
+
+  // Snapshots
+  subtotalMinor BigInt
+  taxMinor      BigInt?
+  shippingMinor BigInt?
+  discountMinor BigInt?
+  totalMinor    BigInt?
+
+  // Expiration
+  expiresAt DateTime
+
+  // Addresses (can be JSON or related tables, using Json for simplicity)
+  shippingAddress Json?
+  billingAddress  Json?
+
+  // Contact Info
+  email String?
+  phone String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines           CheckoutLine[]
+  paymentAttempts PaymentAttempt[]
+  order           Order?
+
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model CheckoutLine {
+  id                String          @id @default(uuid())
+  checkoutSessionId String
+  checkoutSession   CheckoutSession @relation(fields: [checkoutSessionId], references: [id], onDelete: Cascade)
+
+  productId String
+  sku       String?
+  name      String
+  quantity  Int
+
+  unitPriceMinor    BigInt
+  lineSubtotalMinor BigInt
+
+  reservationId String?      @unique
+  reservation   Reservation? @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+
+  @@index([checkoutSessionId])
+}
+
+enum PaymentProvider {
+  STRIPE
+  RAZORPAY
+  PAYPAL
+}
+
+enum PaymentStatus {
+  CREATED
+  PENDING
+  AUTHORIZED
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model PaymentAttempt {
+  id                String          @id @default(uuid())
+  idempotencyKey    String          @unique
+  checkoutSessionId String
+  checkoutSession   CheckoutSession @relation(fields: [checkoutSessionId], references: [id])
+  provider          PaymentProvider
+  providerOrderId   String          @unique
+  providerPaymentId String?
+
+  amountMinor   BigInt
+  currency      String
+  status        PaymentStatus @default(CREATED)
+  failureReason String?
+
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  verifiedAt DateTime?
+
+  order Order?
+
+  @@index([checkoutSessionId])
+  @@index([providerOrderId])
+}
+
+enum OrderStatus {
+  CONFIRMED
+  PROCESSING
+  READY_FOR_FULFILLMENT
+  CANCELLED
+}
+
+model Order {
+  id                String          @id @default(uuid())
+  orderNumber       String          @unique
+  accessToken       String          @unique @default(uuid())
+  checkoutSessionId String          @unique
+  checkoutSession   CheckoutSession @relation(fields: [checkoutSessionId], references: [id])
+  paymentAttemptId  String          @unique
+  paymentAttempt    PaymentAttempt  @relation(fields: [paymentAttemptId], references: [id])
+  status            OrderStatus     @default(CONFIRMED)
+
+  currency             String
+  productSubtotalMinor BigInt
+  taxMinor             BigInt
+  shippingMinor        BigInt
+  discountMinor        BigInt
+  totalMinor           BigInt
+
+  shippingAddress Json?
+  billingAddress  Json?
+  email           String?
+  phone           String?
+
+  lines                OrderLine[]
+  statusHistory        OrderStatusHistory[]
+  fulfillmentHandoff   FulfillmentHandoff?
+  shipment             Shipment?
+  confirmationDelivery ConfirmationDelivery?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model OrderStatusHistory {
+  id         String       @id @default(uuid())
+  orderId    String
+  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  reason     String?
+  actor      String
+  createdAt  DateTime     @default(now())
+
+  @@index([orderId])
+}
+
+enum ShipmentStatus {
+  CREATED
+  DISPATCHED
+  IN_TRANSIT
+  DELIVERED
+  FAILED
+  CANCELLED
+}
+
+model Shipment {
+  id                 String                  @id @default(uuid())
+  orderId            String                  @unique
+  order              Order                   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fulfillmentId      String                  @unique
+  fulfillmentHandoff FulfillmentHandoff      @relation(fields: [fulfillmentId], references: [id])
+  provider           String
+  providerShipmentId String                  @unique
+  trackingNumber     String?
+  status             ShipmentStatus          @default(CREATED)
+  statusHistory      ShipmentStatusHistory[]
+
+  shippingAddress Json
+
+  dispatchedAt DateTime?
+  deliveredAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model ShipmentStatusHistory {
+  id              String         @id @default(uuid())
+  shipmentId      String
+  shipment        Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  status          ShipmentStatus
+  reason          String?
+  providerEventId String?
+  createdAt       DateTime       @default(now())
+
+  @@index([shipmentId])
+}
+
+model FulfillmentHandoff {
+  id          String    @id @default(uuid())
+  orderId     String    @unique
+  order       Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status      String    @default("PENDING")
+  handoffData Json
+  shipment    Shipment?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model ConfirmationDelivery {
+  id            String    @id @default(uuid())
+  orderId       String    @unique
+  order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status        String    @default("PENDING")
+  deliveredAt   DateTime?
+  failureReason String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model OrderLine {
+  id                String  @id @default(uuid())
+  orderId           String
+  order             Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId         String
+  sku               String?
+  name              String
+  quantity          Int
+  unitPriceMinor    BigInt
+  lineSubtotalMinor BigInt
+
+  @@index([orderId])
+}

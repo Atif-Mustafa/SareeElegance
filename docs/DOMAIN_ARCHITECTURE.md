@@ -42,63 +42,49 @@ The current system operates as a **Modular Monolith**. We do not require microse
 ## 3. Core Bounded Contexts
 
 ### 3.1 Catalog & Merchandising Context
-- **Responsibilities**: Curating saree storytelling, weaving specifications, regional cluster profiles, and pricing tiers.
+- **Responsibilities**: Curating saree storytelling, weaving specifications, regional cluster profiles, and pricing tiers. Note: Catalog persistence is strictly separated from Inventory.
 - **Aggregate Root**: `Product` (Saree SKU).
-- **Entities**: `ProductVariant`, `ProductImage`, `ProductAttribute`, `Category`, `Collection`, `Fabric`, `Weave`, `Technique`, `Pattern`, `Motif`, `Artisan`, `Region`.
-- **Public Services**: Catalog Query Service, Merchandising Command Service.
-- **Published Events**: `ProductCreated`, `ProductUpdated`, `ProductPublished`, `ProductUnpublished`, `ProductPriceChanged`.
-- **Transaction Boundaries**: Updates to a product and its attributes/variants must be strictly transactional.
+- **Entities**: `SareeDetails`, `ProductMedia`, `ProductColor`, `ProductOccasion`, `Category`.
 
-### 3.2 Inventory & Warehouse Context
-- **Responsibilities**: Tracking physical 1-of-1 unique saree availability, loom re-weave schedules, and real-time stock holds.
-- **Aggregate Root**: `Inventory`, `Warehouse`.
-- **Entities**: `InventoryTransaction`, `StockHoldReservation`.
-- **Public Services**: Stock Availability Service, Reservation Service.
-- **Consumed Events**: `OrderPlaced`, `OrderCancelled`, `ReturnRequested`.
-- **Published Events**: `InventoryAdjusted`, `InventoryReserved`, `InventoryReservationExpired`, `InventoryReleased`.
-- **Forbidden Dependencies**: Cannot synchronously depend on Order or Payment logic.
+### 3.2 Cart & Commerce Policy Context
+- **Responsibilities**: Resolving transient intent into verified financial amounts. Validates pricing integrity, prevents currency mixing, applies cart-level policies (999 unit limit), and fails safely against upstream downtime.
+- **Aggregate Root**: `CartValidationResult`.
+- **Entities**: `CartLine`, `Money`.
+- **Invariant Policy**: The frontend client is NEVER authoritative over the price of an item or the subtotal of the cart. Any locally derived values are explicitly presented as unverified until validated statelessly by the backend. If the backend is unreachable (e.g. database failure), the domain must fail closed (emit 503) and suppress checkout flow.
 
-### 3.3 Order Management System (OMS) & Checkout Context
-- **Responsibilities**: Managing multi-currency checkout, GST/VAT tax calculation, payment capture, and DDP fulfillment lifecycle.
-- **Aggregate Root**: `Order`, `Cart`.
-- **Entities**: `OrderItem`, `Payment`, `Shipment`, `TaxRule`, `ShippingRule`, `Return`.
-- **Public Services**: Checkout Service, Order Processing Service, Payment Gateway Service.
-- **Published Events**: `CartConvertedToOrder`, `OrderPlaced`, `OrderConfirmed`, `OrderCancelled`, `PaymentInitiated`, `PaymentAuthorized`, `PaymentSucceeded`, `PaymentFailed`, `RefundRequested`, `RefundSucceeded`, `ShipmentCreated`, `ShipmentDispatched`, `ShipmentDelivered`, `ReturnRequested`.
+## Catalog API Boundary
+The Public Catalog API enforces strict lifecycle rules (e.g. `status: 'ACTIVE'` only).
+Raw Prisma models are mapped via explicit domain Mappers (`catalog.mapper.ts`) before being exposed.
+**Crucially, all Prisma/PostgreSQL `BigInt` prices are converted explicitly to `string` in the API mapping layer.** This ensures that precision is not lost and we do not introduce dangerous global `BigInt.prototype.toJSON` overrides. 
 
-### 3.4 Customer & Loyalty Context (Identity and Access)
-- **Responsibilities**: Authentication, RBAC governance, heirloom wishlist curation, reviews, and bridal preference profiles.
-- **Aggregate Root**: `User`.
-- **Entities**: `Address`, `Wishlist`, `Review`, `Rating`, `RefreshToken`.
-- **Public Services**: Authentication Service, User Profile Service, Wishlist Service.
-- **Published Events**: `ReviewSubmitted`, `UserPreferenceUpdated`.
+### 3.3 Inventory & Warehouse Context
+- **Responsibilities**: Providing authoritative inventory availability, enforcing real-time concurrency locks, preventing overselling, and managing temporary reservations (holds) and expirations.
+- **Aggregate Root**: `Inventory`.
+- **Entities**: `Reservation`.
+- **Invariant Policy**: Cart validation does not reserve inventory. Reservations require explicit lifecycle actions (`ACTIVE`, `RELEASED`, `EXPIRED`, `CONSUMED`) and must utilize atomic database locking (e.g. `FOR UPDATE`) to prevent race conditions during high-concurrency checkout phases. Client availability reads must not be treated as authoritative; oversell protection happens securely at the database level.
 
-### 3.5 Localization & Currency Context
-- **Responsibilities**: Maintaining live currency conversion ledgers, regional GST/VAT tax percentages, and translation strings.
-- **Aggregate Root**: `Country`, `Currency`.
-- **Entities**: `ExchangeRate`, `Language`, `TranslationEntry`.
-- **Public Services**: Pricing Localization Service, Translation Service.
-- **Published Events**: `ExchangeRatesUpdated`, `LocalizationConfigUpdated`.
+### 3.4 Checkout & Payment Context
+- **Purpose**: Secure orchestration of pricing, inventory, and payment collection.
+- **Key Concepts**: CheckoutSession, Immutable Line Snapshots, Payment Intent.
+- **Boundaries**: Operates statelessly regarding inventory, requesting reservations via the Inventory Context and rolling back holds if payment fails or expires.
+- **Outputs**: Confirmed Order.
 
-### 3.6 Content and CMS Context
-- **Responsibilities**: Managing home page banners, editorial heritage stories, promotional ribbons.
-- **Entities**: `HeroBanner`, `PromotionalRibbon`, `HeritageStory`, `CampaignBlock`.
-- **Published Events**: `CMSContentPublished`.
+### 3.6 Shipping & Delivery Context
+- **Purpose**: Authoritative execution and tracking of fulfilled shipments.
+- **Key Concepts**: Shipment, Provider, Tracking, Webhooks.
+- **Boundaries**: Purely operational execution. Does not own pricing or commercial order state. Requires a `READY_FOR_FULFILLMENT` Order and its `FulfillmentHandoff`.
+- **Rules**:
+  - Shipping status is exclusively dictated by the external provider (e.g. Courier).
+  - Tracking numbers and delivery times are never fabricated locally.
+  - Order status is independent; shipping events map explicitly without sharing enums.
 
-### 3.7 AI Concierge & Recommendations Context
-- **Responsibilities**: AI Bridal Styling, visual search motif matching, similar saree vector recommendations.
-- **Public Services**: AI Consultation Service, Semantic Search Service.
-- **Dependencies**: Depends on Catalog Context for read-only product data and `pgvector` embeddings.
 
-### 3.8 Notifications Context
-- **Responsibilities**: Sending transactional and marketing notifications across Email, SMS, WhatsApp, and WebSockets.
-- **Consumed Events**: `NotificationRequested` and all major domain events (`OrderPlaced`, `ShipmentDispatched`, etc.).
-
----
-
-## 4. Context Integration & Anti-Corruption Layers (ACL)
-- **Shared Kernel**: Zod domain schemas (`/src/shared/schemas`) act as the shared contract across contexts.
-- **Anti-Corruption Layer (ACL)**: When the OMS interacts with external payment gateways (Stripe, Razorpay) or logistics providers, an ACL adapter translates external payloads into internal domain entities to prevent external model leakage.
-- **Dependency Direction Rules**:
-  - The core domain (Catalog, OMS) must NOT depend on infrastructure details or external APIs directly.
-  - Controllers must not contain business logic; they delegate to Domain Services.
-  - Circular dependencies between contexts are strictly forbidden. Use domain events to decouple.
+### 3.5 Order & Post-Payment Context
+- **Purpose**: Authoritative lifecycle management for confirmed orders.
+- **Key Concepts**: Order, OrderStatusHistory, FulfillmentHandoff.
+- **Boundaries**: Strictly accepts finalized Orders from the Checkout context. Authoritative for customer-facing order states (e.g., CONFIRMED, READY_FOR_FULFILLMENT).
+- **Rules**:
+  - **No Pricing Mutation**: Order lines and totals are completely immutable once finalized.
+  - **Cancellation Window**: Cancellations are permitted until the state reaches `READY_FOR_FULFILLMENT`. Database-level row locking (`FOR UPDATE`) ensures exactly-once execution and prevents race conditions between cancellation and fulfillment handoff.
+  - **Secure Access Tokens**: Order access tokens are securely hashed via SHA-256 in the database. Raw tokens are issued once at confirmation.
+  - **Inventory Reconciliation**: Cancellation automatically delegates inventory rollback to the Inventory Context.

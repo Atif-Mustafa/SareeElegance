@@ -1,0 +1,41 @@
+--- docs/API_SPEC.md
++++ docs/API_SPEC.md
+@@ -20,8 +20,10 @@
+   "data": {
+     "id": "c81d4e2e-bcf2-11ee-a506-0242ac120002",
+     "name": "Banarasi Katan Silk Saree",
+-    "price": { "amountMinor": "1450000",  },      
+-    
++    "price": {
++      "amountMinor": "1450000",
++      "currency": "INR"
++    }
+   },
+   "meta": {
+     "timestamp": "2026-08-02T03:15:00.000Z"
+@@ -47,15 +49,12 @@
+ 
+ ### 2.3 Standard Error Response (`400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `500 Server Error`)
+ ```json
+ {
+-  "success": false,
+-  "error": {
+-    "code": "VALIDATION_ERROR",
+-    "message": "Invalid ISO language code provided.",
+-    "details": [
+-      {
+-        "field": "locale",
+-        "message": "Must be a valid 2-character ISO 639-1 code."
+-      }
+-    ]
+-  },
+-  "timestamp": "2026-08-02T03:15:00.000Z"
++  "type": "about:blank",
++  "title": "Validation Error",
++  "status": 400,
++  "code": "VALIDATION_001",
++  "detail": "Input payload failed Zod schema validation.",
++  "instance": "/api/v1/localization/translations/invalid",
++  "requestId": "req-12345"
+ }
+ ```

@@ -2,6 +2,27 @@
 
 ---
 
+## PostgreSQL Tooling & Testing Foundation
+
+The project has established its foundational ORM and database tooling using **Prisma 7**.
+
+### Current Status
+* **Provider:** PostgreSQL is the target persistence engine via `@prisma/adapter-pg`. The specific hosted provider (e.g., Neon, Supabase, Cloud SQL) remains undecided.
+* **Schema:** `prisma/schema.prisma` is initialized but currently contains **ZERO domain models**. Catalog, inventory, cart, and authentication persistence are not yet implemented.
+* **Migrations:** No domain migrations exist.
+* **Client Architecture:** The Prisma Client is generated into `node_modules` and exposed via a server-only singleton (`PrismaService`). Prisma types are strictly forbidden from leaking to the frontend.
+
+### Health and Readiness
+* **Liveness:** `GET /api/v1/health` verifies process execution and is completely independent of the database.
+* **Readiness:** `GET /api/v1/health/ready` connects via Prisma (`SELECT 1`) to explicitly reflect database availability without exposing credentials or internal Prisma errors.
+
+### Real Connectivity Testing
+Real database connectivity is tested via an explicit opt-in integration harness to keep everyday tests independent of local DB setups.
+* **Opt-In Requirement:** Set the `TEST_DATABASE_URL` environment variable.
+* **Production Guard:** Real database integration tests are explicitly skipped if `NODE_ENV=production`. Never use a production database for `TEST_DATABASE_URL`.
+* **Execution:** Run `npm run test:db` to execute real connectivity tests.
+* **Actual Connectivity:** We have verified connectivity using the test harness, although currently marked as BLOCKED pending a real instance in the local development environment.
+
 ## 1. Architectural Philosophy & Normalization Strategy
 The database layer for our luxury heritage saree platform is built on **PostgreSQL 16+** using **Prisma ORM**. To support high-value inventory, unique one-of-a-kind sarees, multi-language localization, and multi-currency accounting, the schema adheres to **3rd Normal Form (3NF)** with strategic denormalization applied only for analytical performance (e.g., aggregated review ratings, inventory ledger summaries).
 
@@ -52,15 +73,16 @@ Every relational table across the system inherits a standard enterprise audit an
 ## 3. Core Saree Catalog & Textile Attribute Entities
 
 ### 3.1 `Product`
-- **Purpose**: Represents the master saree catalog entity containing universal editorial descriptions, SEO metadata, and cultural storytelling attributes.
+- **Purpose**: Represents the master saree catalog entity containing universal editorial descriptions, SEO metadata, canonical pricing, and cultural storytelling attributes.
+- **Key Fields**: `id` (UUID), `sku` (unique), `slug` (unique canonical URL), `name`, `shortDescription`, `longDescription`, `priceMinor` (BIGINT), `currency`, `categoryId`, `status`, audit fields.
+- **Indexes**: `@@index([status])`, `@@index([categoryId])`, `@@index([createdAt])`.
 - **Key Fields**: `id` (UUID), `skuPrefix`, `slug` (unique canonical URL), `title`, `subtitle`, `description`, `historyStory`, `categoryId`, `artisanId`, `regionId`, `isActive`, `isArchived`, audit fields.
 - **Indexes**: `@@index([slug, isActive])`, `@@index([categoryId, isActive])`, `@@index([artisanId])`.
 
-### 3.2 `ProductVariant`
-- **Purpose**: Represents purchasable stock-keeping units (SKUs). While many luxury sarees are 1-of-1 unique handwoven pieces, variants handle blouse customization options (unstitched piece, custom-stitched, or contrast blouse), zari purity grades, or dye variations.
-- **Key Fields**: `id` (UUID), `productId`, `sku` (unique), `barcode` (Silk Mark QR), `priceINR`, `priceUSD`, `weightGrams`, `isOneOfAKind`, `zariPurityGrade` (`REAL_SILVER_GOLD_PLATED`, `TESTED_ZARI`, `METALLIC`), `fallPicoStatus` (`INCLUDED`, `OPTIONAL`).
-- **Relationships**: `Product` (`1:N`, Cascade delete), `Inventory` (`1:N`), `CartItem`, `OrderItem`.
-- **Constraints & Indexes**: `@@unique([sku])`, `@@index([productId, isOneOfAKind])`.
+### 3.2 `SareeDetails` (One-to-One with Product)
+- **Purpose**: Represents the ethnic/saree-specific attributes isolated from the core Product. Keeps Product generic enough for potential future categories.
+- **Key Fields**: `id` (UUID), `productId` (unique), `fabric`, `weave`, `zariType`, `motif`, `region`, `artisanName`, `certificateType`, `certificateNumber`, `length`, `width`, `blousePiece`, `washCare`.
+- **Indexes**: `@@index([fabric])`, `@@index([weave])`.
 
 ### 3.3 `ProductImage` & `ProductVideo`
 - **Purpose**: Manages high-resolution multi-angle photography (pallu zoom, zari macro, drape view, reverse weave neatness) and 4K loom weaving videos.
@@ -152,3 +174,6 @@ Every relational table across the system inherits a standard enterprise audit an
   - `Product` -> `ProductVariant` / `ProductImage` / `ProductAttribute` : `onDelete: Cascade`.
   - `Order` -> `OrderItem` / `Payment` / `Shipment` : `onDelete: Restrict` (Orders can never be hard-deleted).
 - **Concurrency**: High-demand 1-of-1 sarees utilize database row-level locking (`SELECT ... FOR UPDATE` via Prisma `$transaction`) during cart reservation to prevent overselling.
+
+### Catalog Read API Notes
+The public catalog endpoints (`/api/v1/products`) strictly retrieve `ACTIVE` entities. Private attributes and entities with `DRAFT` or `ARCHIVED` statuses are entirely inaccessible through these routes.
