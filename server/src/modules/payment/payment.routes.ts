@@ -5,4 +5,4 @@ export const paymentRoutes = Router();
 
 paymentRoutes.post('/', paymentController.createPayment);
 paymentRoutes.post('/verify', paymentController.verifyPayment);
-paymentRoutes.post('/webhook', paymentController.webhook);
+paymentRoutes.post('/webhook', paymentController.handleWebhook);

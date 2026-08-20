@@ -26,6 +26,7 @@ import {
   HelpCircle,
   X
 } from 'lucide-react';
+import { ReturnModal } from '../../returns/components/ReturnModal';
 
 export const OrderTrackingDashboard: React.FC = () => {
   const { userOrders, formatPrice, addToast } = useStore();
@@ -40,6 +41,7 @@ export const OrderTrackingDashboard: React.FC = () => {
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showPreferencesModal, setShowPreferencesModal] = useState(false);
   const [showCareTipsModal, setShowCareTipsModal] = useState(false);
+  const [showReturnModal, setShowReturnModal] = useState(false);
 
   // Delivery preference state
   const [deliveryNote, setDeliveryNote] = useState('Call 15 mins before arrival. Gate entry code: #402');
@@ -276,6 +278,16 @@ export const OrderTrackingDashboard: React.FC = () => {
               <Download className="w-3.5 h-3.5" />
               <span>Tax Invoice & Silk Mark</span>
             </button>
+
+            {activeOrder.orderStatus === 'DELIVERED' && (
+              <button
+                onClick={() => setShowReturnModal(true)}
+                className="bg-[#C28E46] hover:bg-[#D4AF37] text-[#2C221E] font-bold px-3 py-1.5 rounded-xl border border-[#C28E46]/60 transition-all flex items-center gap-1.5"
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span>Return Items</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -601,6 +613,15 @@ export const OrderTrackingDashboard: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* RETURN MODAL */}
+      {showReturnModal && (
+        <ReturnModal 
+          order={activeOrder} 
+          onClose={() => setShowReturnModal(false)} 
+          accessToken="dummy-token-for-client"
+        />
       )}
     </div>
   );

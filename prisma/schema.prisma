@@ -316,6 +316,7 @@ model Order {
   phone           String?
 
   lines                OrderLine[]
+  returns              ReturnRequest[]
   statusHistory        OrderStatusHistory[]
   fulfillmentHandoff   FulfillmentHandoff?
   shipment             Shipment?
@@ -328,14 +329,15 @@ model Order {
 }
 
 model OrderStatusHistory {
-  id         String       @id @default(uuid())
-  orderId    String
-  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  fromStatus OrderStatus?
-  toStatus   OrderStatus
-  reason     String?
-  actor      String
-  createdAt  DateTime     @default(now())
+  id          String       @id @default(uuid())
+  orderId     String
+  order       Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  fromStatus  OrderStatus?
+  toStatus    OrderStatus
+  reason      String?
+  actor       String
+  createdAt   DateTime     @default(now())
+  returnLines ReturnLine[]
 
   @@index([orderId])
 }
@@ -403,16 +405,97 @@ model ConfirmationDelivery {
   updatedAt     DateTime  @updatedAt
 }
 
-model OrderLine {
-  id                String  @id @default(uuid())
+enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  AWAITING_RETURN
+  IN_TRANSIT
+  RECEIVED
+  INSPECTED
+  CLOSED
+}
+
+enum RefundStatus {
+  NOT_REQUESTED
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum ReturnDisposition {
+  PENDING
+  RESTOCKABLE
+  DAMAGED
+  NON_RESELLABLE
+}
+
+model ReturnRequest {
+  id                String          @id @default(uuid())
   orderId           String
-  order             Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order             Order           @relation(fields: [orderId], references: [id])
+  status            ReturnStatus    @default(REQUESTED)
+  refundStatus      RefundStatus    @default(NOT_REQUESTED)
+  providerRefundId  String?         @unique
+  reason            String?
+  lines             ReturnLine[]
+  shipment          ReturnShipment?
+  refundAmountMinor BigInt?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+}
+
+model ReturnLine {
+  id                   String              @id @default(uuid())
+  returnRequestId      String
+  returnRequest        ReturnRequest       @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  orderLineId          String
+  orderLine            OrderLine           @relation(fields: [orderLineId], references: [id])
+  quantity             Int
+  reason               String?
+  disposition          ReturnDisposition   @default(PENDING)
+  orderStatusHistory   OrderStatusHistory? @relation(fields: [orderStatusHistoryId], references: [id])
+  orderStatusHistoryId String?
+
+  @@index([returnRequestId])
+  @@index([orderLineId])
+}
+
+enum ReturnShipmentStatus {
+  CREATED
+  IN_TRANSIT
+  RECEIVED
+  FAILED
+  CANCELLED
+}
+
+model ReturnShipment {
+  id                 String               @id @default(uuid())
+  returnRequestId    String               @unique
+  returnRequest      ReturnRequest        @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  provider           String
+  providerShipmentId String               @unique
+  trackingNumber     String?
+  status             ReturnShipmentStatus @default(CREATED)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model OrderLine {
+  id                String       @id @default(uuid())
+  orderId           String
+  order             Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
   productId         String
   sku               String?
   name              String
   quantity          Int
   unitPriceMinor    BigInt
   lineSubtotalMinor BigInt
+  returnLines       ReturnLine[]
 
   @@index([orderId])
 }

@@ -2,60 +2,96 @@ const fs = require('fs');
 
 let content = fs.readFileSync('prisma/schema.prisma', 'utf-8');
 
-if (!content.includes('enum ShipmentStatus')) {
-  content = content.replace('model FulfillmentHandoff {', `enum ShipmentStatus {
-  CREATED
-  DISPATCHED
+if (!content.includes('enum ReturnStatus')) {
+  content = content.replace('model OrderLine {', `enum ReturnStatus {
+  REQUESTED
+  APPROVED
+  REJECTED
+  AWAITING_RETURN
   IN_TRANSIT
-  DELIVERED
+  RECEIVED
+  INSPECTED
+  CLOSED
+}
+
+enum RefundStatus {
+  NOT_REQUESTED
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+enum ReturnDisposition {
+  PENDING
+  RESTOCKABLE
+  DAMAGED
+  NON_RESELLABLE
+}
+
+model ReturnRequest {
+  id              String         @id @default(uuid())
+  orderId         String
+  order           Order          @relation(fields: [orderId], references: [id])
+  status          ReturnStatus   @default(REQUESTED)
+  refundStatus    RefundStatus   @default(NOT_REQUESTED)
+  providerRefundId String?       @unique
+  reason          String?
+  lines           ReturnLine[]
+  shipment        ReturnShipment?
+  refundAmountMinor BigInt?
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([orderId])
+}
+
+model ReturnLine {
+  id              String            @id @default(uuid())
+  returnRequestId String
+  returnRequest   ReturnRequest     @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
+  orderLineId     String
+  orderLine       OrderLine         @relation(fields: [orderLineId], references: [id])
+  quantity        Int
+  reason          String?
+  disposition     ReturnDisposition @default(PENDING)
+
+  @@index([returnRequestId])
+  @@index([orderLineId])
+}
+
+enum ReturnShipmentStatus {
+  CREATED
+  IN_TRANSIT
+  RECEIVED
   FAILED
   CANCELLED
 }
 
-model Shipment {
-  id                 String           @id @default(uuid())
-  orderId            String           @unique
-  order              Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  fulfillmentId      String           @unique
-  fulfillmentHandoff FulfillmentHandoff @relation(fields: [fulfillmentId], references: [id])
+model ReturnShipment {
+  id                 String               @id @default(uuid())
+  returnRequestId    String               @unique
+  returnRequest      ReturnRequest        @relation(fields: [returnRequestId], references: [id], onDelete: Cascade)
   provider           String
-  providerShipmentId String           @unique
+  providerShipmentId String               @unique
   trackingNumber     String?
-  status             ShipmentStatus   @default(CREATED)
-  statusHistory      ShipmentStatusHistory[]
+  status             ReturnShipmentStatus @default(CREATED)
   
-  shippingAddress    Json
-  
-  dispatchedAt       DateTime?
-  deliveredAt        DateTime?
-  createdAt          DateTime         @default(now())
-  updatedAt          DateTime         @updatedAt
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 }
 
-model ShipmentStatusHistory {
-  id          String         @id @default(uuid())
-  shipmentId  String
-  shipment    Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
-  status      ShipmentStatus
-  reason      String?
-  providerEventId String?
-  createdAt   DateTime       @default(now())
-
-  @@index([shipmentId])
+model OrderLine {`);
 }
 
-model FulfillmentHandoff {`);
+if (!content.includes('returns              ReturnRequest[]')) {
+  content = content.replace('lines                OrderLine[]', `lines                OrderLine[]
+  returns              ReturnRequest[]`);
 }
 
-if (!content.includes('shipment         Shipment?')) {
-  content = content.replace('fulfillmentHandoff FulfillmentHandoff?', `fulfillmentHandoff FulfillmentHandoff?
-  shipment         Shipment?`);
+if (!content.includes('returnLines       ReturnLine[]')) {
+  content = content.replace('@@index([orderId])', `@@index([orderId])
+  returnLines       ReturnLine[]`);
 }
-
-if (!content.includes('shipment   Shipment?')) {
-  content = content.replace('handoffData Json', `handoffData Json
-  shipment   Shipment?`);
-}
-
 
 fs.writeFileSync('prisma/schema.prisma', content);

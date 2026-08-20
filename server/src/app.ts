@@ -10,6 +10,7 @@ import { checkoutRouter } from './modules/checkout/checkout.routes';
 import { paymentRoutes } from './modules/payment/payment.routes';
 import { orderRoutes } from './modules/order/order.routes';
 import { shippingRoutes } from './modules/shipping/shipping.routes';
+import { returnsRoutes } from './modules/returns/returns.routes';
 
 export function createApp(): Express {
   const app = express();
@@ -26,6 +27,7 @@ export function createApp(): Express {
   app.use('/api/v1/payments', paymentRoutes);
   app.use('/api/v1/orders', orderRoutes);
   app.use('/api/v1', shippingRoutes);
+  app.use('/api/v1', returnsRoutes);
 
   // Fallbacks & Error Handlers (API Only)
   app.use('/api', notFoundHandler);

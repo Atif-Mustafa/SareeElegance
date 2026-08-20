@@ -426,3 +426,32 @@ Requires `x-shipping-signature` header for HMAC verification.
   "eventId": "evt_abc123"
 }
 ```
+
+## 13. Returns & Refunds
+
+### 13.1 Create Return Request
+`POST /api/v1/orders/:id/returns`
+
+Creates a return request for eligible items from a delivered order.
+Requires valid Order `accessToken`.
+
+**Request Body:**
+```json
+{
+  "reason": "Does not fit",
+  "lines": [
+    {
+      "orderLineId": "line-uuid-1",
+      "quantity": 1,
+      "reason": "Color mismatch"
+    }
+  ]
+}
+```
+
+### 13.2 Get Order Returns
+`GET /api/v1/orders/:id/returns`
+
+Fetches all returns associated with an order.
+Requires valid Order `accessToken`.
+

@@ -1,13 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
 import { paymentService } from './payment.service';
-import { orderService } from '../order/order.service';
 
 export const paymentController = {
   async createPayment(req: Request, res: Response, next: NextFunction) {
     try {
-      const { checkoutSessionId } = req.body;
-      const result = await paymentService.createPaymentAttempt(checkoutSessionId);
-      res.status(201).json(result);
+      const { checkoutSessionId, amountMinor, currency, provider } = req.body;
+      const attempt = await paymentService.createPaymentAttempt(checkoutSessionId, BigInt(amountMinor || 0), currency || 'USD', provider || 'STRIPE');
+      res.status(201).json(attempt);
     } catch (error) {
       next(error);
     }
@@ -15,22 +14,18 @@ export const paymentController = {
 
   async verifyPayment(req: Request, res: Response, next: NextFunction) {
     try {
-      const { providerOrderId, providerPaymentId, signature } = req.body;
-      const attempt = await paymentService.verifyPayment(providerOrderId, providerPaymentId, signature);
-      
-      const order = await orderService.finalizeOrder(attempt.id);
-
-      res.status(200).json({ payment: attempt, order });
+      const { id } = req.params;
+      const result = await paymentService.verifyPayment(id);
+      res.status(200).json(result);
     } catch (error) {
       next(error);
     }
   },
 
-  async webhook(req: Request, res: Response, next: NextFunction) {
+  async handleWebhook(req: Request, res: Response, next: NextFunction) {
     try {
-      const event = req.body;
-      await paymentService.handleWebhook(event);
-      res.status(200).send('OK');
+      await paymentService.handleWebhook('stripe', req.body);
+      res.status(200).send();
     } catch (error) {
       next(error);
     }
