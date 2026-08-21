@@ -9,7 +9,7 @@ import { InventoryReservationDto } from '../../../../shared/contracts/inventory/
 import { Prisma } from '@prisma/client';
 
 export class CheckoutService {
-  async createCheckout(request: CreateCheckoutRequestDto): Promise<CheckoutSessionDto> {
+  async createCheckout(request: CreateCheckoutRequestDto, customerId?: string): Promise<CheckoutSessionDto> {
     const { idempotencyKey, cart, shippingAddress, billingAddress } = request;
 
     // 1. Check idempotency
@@ -97,6 +97,7 @@ export class CheckoutService {
           billingAddress: billingAddress ? (billingAddress as any) : null,
           email: shippingAddress?.email || null,
           phone: shippingAddress?.phone || null,
+          customerId: customerId || null,
           lines: {
             create: validatedCart.lines.map((line, index) => {
               const res = successfulReservations[index];

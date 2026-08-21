@@ -7,12 +7,9 @@ export const returnsController = {
     try {
       const { orderId } = req.params;
       const accessToken = req.query.accessToken as string || req.headers['x-order-token'] as string;
-      
-      if (!accessToken) {
-        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Order access token required' });
-      }
+      const customerId = req.customer?.id;
 
-      await orderService.getOrderSecure(orderId, accessToken);
+      await orderService.assertOrderAccess(orderId, customerId, accessToken);
       
       const result = await returnsService.createReturnRequest(orderId, req.body);
       res.status(201).json(result);
@@ -25,12 +22,9 @@ export const returnsController = {
     try {
       const { orderId } = req.params;
       const accessToken = req.query.accessToken as string || req.headers['x-order-token'] as string;
+      const customerId = req.customer?.id;
 
-      if (!accessToken) {
-        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Order access token required' });
-      }
-
-      await orderService.getOrderSecure(orderId, accessToken);
+      await orderService.assertOrderAccess(orderId, customerId, accessToken);
       
       const returns = await returnsService.getReturnsForOrder(orderId);
       res.status(200).json(returns);

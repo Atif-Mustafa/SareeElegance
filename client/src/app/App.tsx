@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { Navbar } from '../components/layout/Navbar';
 import { Footer } from '../components/layout/Footer';
 import { CartDrawer } from '../features/cart/components/CartDrawer';
@@ -8,6 +8,8 @@ import { VideoShoppingModal } from '../features/videoShopping/components/VideoSh
 import { SilkGlossaryModal } from '../features/glossary/components/SilkGlossaryModal';
 import { ToastContainer } from '../components/ui/ToastContainer';
 import { ChatbotModal } from '../features/chatbot/components/ChatbotModal';
+import { AuthModal } from '../features/auth/components/AuthModal';
+import { useStore } from '../store/useStore';
 
 import { HomePage } from '../pages/HomePage';
 import { PLP } from '../pages/PLP';
@@ -22,41 +24,59 @@ import { ShippingPolicyPage } from '../pages/ShippingPolicyPage';
 import { TermsPage } from '../pages/TermsPage';
 import { FAQPage } from '../pages/FAQPage';
 import { ContactPage } from '../pages/ContactPage';
+import { AdminPage } from '../pages/AdminPage';
+
+function AppContent() {
+  const { fetchCurrentUser } = useStore();
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/admin');
+
+  React.useEffect(() => {
+    fetchCurrentUser();
+  }, [fetchCurrentUser]);
+
+  return (
+    <div className="min-h-screen flex flex-col bg-[#FAF7F2] text-[#2C221E] font-sans antialiased">
+      {!isAdminRoute && <Navbar />}
+
+      <main className="flex-1">
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/collections/:category" element={<PLP />} />
+          <Route path="/product/:slug" element={<PDP />} />
+          <Route path="/checkout" element={<CheckoutPage />} />
+          <Route path="/order-confirmation/:id" element={<OrderConfirmationPage />} />
+          <Route path="/account" element={<AccountPage />} />
+          <Route path="/heritage" element={<HeritagePage />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
+          <Route path="/cancellation-and-returns" element={<CancellationReturnsPage />} />
+          <Route path="/shipping-policy" element={<ShippingPolicyPage />} />
+          <Route path="/terms-and-conditions" element={<TermsPage />} />
+          <Route path="/faqs" element={<FAQPage />} />
+          <Route path="/contact-us" element={<ContactPage />} />
+          <Route path="/admin/*" element={<AdminPage />} />
+          <Route path="/admin" element={<AdminPage />} />
+        </Routes>
+      </main>
+
+      {!isAdminRoute && <Footer />}
+
+      {/* Global Modals & Drawers */}
+      <CartDrawer />
+      <SearchModal />
+      <VideoShoppingModal />
+      <SilkGlossaryModal />
+      <ToastContainer />
+      <ChatbotModal />
+      <AuthModal />
+    </div>
+  );
+}
 
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen flex flex-col bg-[#FAF7F2] text-[#2C221E] font-sans antialiased">
-        <Navbar />
-
-        <main className="flex-1">
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/collections/:category" element={<PLP />} />
-            <Route path="/product/:slug" element={<PDP />} />
-            <Route path="/checkout" element={<CheckoutPage />} />
-            <Route path="/order-confirmation/:id" element={<OrderConfirmationPage />} />
-            <Route path="/account" element={<AccountPage />} />
-            <Route path="/heritage" element={<HeritagePage />} />
-            <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
-            <Route path="/cancellation-and-returns" element={<CancellationReturnsPage />} />
-            <Route path="/shipping-policy" element={<ShippingPolicyPage />} />
-            <Route path="/terms-and-conditions" element={<TermsPage />} />
-            <Route path="/faqs" element={<FAQPage />} />
-            <Route path="/contact-us" element={<ContactPage />} />
-          </Routes>
-        </main>
-
-        <Footer />
-
-        {/* Global Modals & Drawers */}
-        <CartDrawer />
-        <SearchModal />
-        <VideoShoppingModal />
-        <SilkGlossaryModal />
-        <ToastContainer />
-        <ChatbotModal />
-      </div>
+      <AppContent />
     </BrowserRouter>
   );
 }

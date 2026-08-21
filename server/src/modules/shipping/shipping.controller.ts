@@ -7,13 +7,10 @@ export const shippingController = {
     try {
       const { orderId } = req.params;
       const accessToken = req.query.accessToken as string || req.headers['x-order-token'] as string;
-      
-      if (!accessToken) {
-        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Order access token required' });
-      }
+      const customerId = req.customer?.id;
 
-      // Verify authorization
-      await orderService.getOrderSecure(orderId, accessToken);
+      // Verify authorization (customer or access token)
+      await orderService.assertOrderAccess(orderId, customerId, accessToken);
 
       const shipment = await shippingService.getShipmentForOrder(orderId);
       res.status(200).json(shipment);

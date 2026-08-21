@@ -6,12 +6,9 @@ export const orderController = {
     try {
       const { id } = req.params;
       const accessToken = req.query.accessToken as string || req.headers['x-order-token'] as string;
-      
-      if (!accessToken) {
-        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Order access token required' });
-      }
+      const customerId = req.customer?.id;
 
-      const order = await orderService.getOrderSecure(id, accessToken);
+      const order = await orderService.assertOrderAccess(id, customerId, accessToken);
       res.status(200).json(order);
     } catch (error) {
       next(error);
@@ -22,16 +19,14 @@ export const orderController = {
     try {
       const { id } = req.params;
       const accessToken = req.query.accessToken as string || req.headers['x-order-token'] as string;
-      
-      if (!accessToken) {
-        return res.status(401).json({ code: 'UNAUTHORIZED', message: 'Order access token required' });
-      }
+      const customerId = req.customer?.id;
 
-      // Verify token
-      await orderService.getOrderSecure(id, accessToken);
+      // Verify access permission
+      await orderService.assertOrderAccess(id, customerId, accessToken);
 
       const { reason } = req.body;
-      const order = await orderService.cancelOrder(id, reason || 'Customer request', 'CUSTOMER_REQUEST');
+      const actor = customerId ? `CUSTOMER_${customerId}` : 'CUSTOMER_REQUEST';
+      const order = await orderService.cancelOrder(id, reason || 'Customer request', actor);
       res.status(200).json(order);
     } catch (error) {
       next(error);
@@ -51,3 +46,4 @@ export const orderController = {
     }
   }
 };
+

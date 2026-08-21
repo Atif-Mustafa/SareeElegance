@@ -4,37 +4,21 @@ import { inventoryRepository } from './inventory.repository';
 
 export class InventoryService {
   async reserveItems(productId: string, quantity: number) {
-    if (quantity <= 0) throw ApiError.badRequest('Quantity must be positive');
+    if (quantity <= 0 || !Number.isInteger(quantity)) {
+      throw ApiError.badRequest('Quantity must be a positive integer', 'INVALID_QUANTITY');
+    }
+    if (quantity > 999) {
+      throw ApiError.badRequest('Quantity exceeds maximum of 999', 'INVALID_QUANTITY');
+    }
         
-    return await prisma.$transaction(async (tx) => {
-      const inventory = await tx.inventory.findUnique({
-        where: { productId }
-      });
-      if (!inventory) throw ApiError.notFound('Inventory not found');
-      if (inventory.onHand < quantity) throw ApiError.badRequest('Insufficient inventory', 'INSUFFICIENT_STOCK');
-      
-      const updated = await tx.inventory.update({
-        where: { productId },
-        data: { onHand: inventory.onHand - quantity }
-      });
-      
-      const reservation = await tx.reservation.create({
-        data: {
-          inventoryId: inventory.id,
-          quantity,
-          status: 'ACTIVE' as const,
-          expiresAt: new Date(Date.now() + 15 * 60 * 1000) // 15 mins
-        }
-      });
-      
-      return { 
-        status: 'ACTIVE' as const,
-        reservationId: reservation.id,
-        productId,
-        quantity,
-        expiresAt: reservation.expiresAt.toISOString()
-      };
-    });
+    const reservation = await inventoryRepository.reserve(productId, quantity, 15);
+    return { 
+      status: 'ACTIVE' as const,
+      reservationId: reservation.id,
+      productId,
+      quantity,
+      expiresAt: reservation.expiresAt.toISOString()
+    };
   }
   
   async consumeReservation(reservationId: string) {
@@ -84,11 +68,10 @@ export class InventoryService {
     });
   }
 
-  async checkAvailability(productId: string, quantity: number = 1): Promise<{ available: boolean, onHand: number, status: string }> {
-    const inventory = await prisma.inventory.findUnique({ where: { productId } });
-    if (!inventory) return { available: false, onHand: 0, status: 'OUT_OF_STOCK' };
-    const available = inventory.onHand >= quantity;
-    return { available, onHand: inventory.onHand, status: available ? 'AVAILABLE' : 'OUT_OF_STOCK' };
+  async checkAvailability(productId: string): Promise<{ available: number, onHand: number, status: string }> {
+    const inv = await inventoryRepository.getAvailability(productId);
+    if (!inv) throw ApiError.notFound('Product not found in inventory');
+    return { available: inv.available, onHand: inv.onHand, status: inv.available > 0 ? 'AVAILABLE' : 'OUT_OF_STOCK' };
   }
 
   async releaseReservation(reservationId: string) {

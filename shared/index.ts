@@ -21,4 +21,6 @@ export * from './contracts/inventory/inventory-response';
 export * from './contracts/payment/payment-request';
 export * from './contracts/payment/payment-response';
 export * from './contracts/order/order-response';
+export * from './contracts/auth/auth.dto';
+export * from './schemas/auth';
 

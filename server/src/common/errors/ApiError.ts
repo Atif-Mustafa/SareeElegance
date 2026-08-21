@@ -25,6 +25,14 @@ export class ApiError extends Error {
     return new ApiError(401, message, code, 'Unauthorized');
   }
 
+  static forbidden(message: string, code: string = 'FORBIDDEN') {
+    return new ApiError(403, message, code, 'Forbidden');
+  }
+
+  static conflict(message: string, code: string = 'CONFLICT') {
+    return new ApiError(409, message, code, 'Conflict');
+  }
+
   static internal(message: string, code: string = 'INFRA_001') {
     return new ApiError(503, message, code, 'Service Unavailable');
   }

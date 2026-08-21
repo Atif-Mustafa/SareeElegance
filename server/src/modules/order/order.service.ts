@@ -58,6 +58,7 @@ export class OrderService {
             billingAddress: checkout.billingAddress || Prisma.JsonNull,
             email: checkout.email,
             phone: checkout.phone,
+            customerId: checkout.customerId || null,
             lines: {
               create: checkout.lines.map(l => ({
                 productId: l.productId,
@@ -86,6 +87,32 @@ export class OrderService {
       console.error("Failed to create Order transactionally", err);
       throw ApiError.internal('Order finalization failed internally');
     }
+  }
+
+  async assertOrderAccess(id: string, customerId?: string, accessToken?: string): Promise<OrderDto> {
+    const order = await prisma.order.findUnique({
+      where: { id },
+      include: { lines: true }
+    });
+
+    if (!order) {
+      throw ApiError.notFound('Order not found');
+    }
+
+    // 1. Authenticated customer ownership check
+    if (customerId && order.customerId === customerId) {
+      return this.mapToDto(order);
+    }
+
+    // 2. Token-based access check
+    if (accessToken) {
+      const hashedInput = createHash('sha256').update(accessToken).digest('hex');
+      if (order.accessToken === hashedInput || order.accessToken === accessToken) {
+        return this.mapToDto(order);
+      }
+    }
+
+    throw ApiError.unauthorized('Order access token required or unauthorized account', 'UNAUTHORIZED');
   }
 
   async getOrderSecure(id: string, accessToken: string): Promise<OrderDto> {

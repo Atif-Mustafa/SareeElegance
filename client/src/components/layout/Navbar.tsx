@@ -28,6 +28,8 @@ export const Navbar: React.FC = () => {
     setIsSearchOpen,
     setIsVideoModalOpen,
     openGlossaryModal,
+    currentUser,
+    openAuthModal,
     t
   } = useStore();
 
@@ -212,14 +214,29 @@ export const Navbar: React.FC = () => {
           </button>
 
           {/* User Account */}
-          <Link
-            to="/account"
-            id="nav-account-link"
-            className="hidden sm:flex items-center gap-1.5 p-1.5 text-[#2C221E]/80 hover:text-[#C28E46] transition-colors"
-            title="My Account"
-          >
-            <User className="w-5 h-5 opacity-80" />
-          </Link>
+          {currentUser ? (
+            <Link
+              to="/account"
+              id="nav-account-link"
+              className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-full bg-[#FAF7F2] border border-[#C28E46]/40 hover:border-[#C28E46] text-[#2C221E] text-xs font-medium transition-all shadow-xs"
+              title="My Account"
+            >
+              <div className="w-5 h-5 rounded-full bg-[#2C221E] text-[#D4AF37] flex items-center justify-center text-[10px] font-bold uppercase">
+                {currentUser.name ? currentUser.name[0] : currentUser.email[0]}
+              </div>
+              <span className="max-w-[80px] truncate">{currentUser.name?.split(' ')[0] || 'Account'}</span>
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openAuthModal('login')}
+              id="nav-account-link"
+              className="hidden sm:flex items-center gap-1.5 p-1.5 text-[#2C221E]/80 hover:text-[#C28E46] transition-colors"
+              title="Sign In / Account"
+            >
+              <User className="w-5 h-5 opacity-80" />
+            </button>
+          )}
         </div>
       </div>
 

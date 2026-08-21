@@ -28,16 +28,18 @@ export const CheckoutPage: React.FC = () => {
     clearCart,
     formatPrice,
     couponCode,
-    couponDiscountPercent
+    couponDiscountPercent,
+    currentUser,
+    savedAddresses
   } = useStore();
 
   const [step, setStep] = useState<1 | 2 | 3>(1);
 
   // Address Form State
   const [address, setAddress] = useState<OrderAddress>({
-    fullName: 'Ananya Sharma',
-    email: 'ananya.sharma@example.com',
-    phone: '+91 98765 43210',
+    fullName: currentUser?.name || 'Ananya Sharma',
+    email: currentUser?.email || 'ananya.sharma@example.com',
+    phone: currentUser?.phone || '+91 98765 43210',
     addressLine1: 'Flat 502, Prestige Royal Gardens',
     addressLine2: 'Indiranagar 100ft Road',
     city: 'Bengaluru',
@@ -45,6 +47,31 @@ export const CheckoutPage: React.FC = () => {
     pincode: '560038',
     country: 'India'
   });
+
+  useEffect(() => {
+    if (currentUser) {
+      setAddress((prev) => ({
+        ...prev,
+        fullName: currentUser.name || prev.fullName,
+        email: currentUser.email || prev.email,
+        phone: currentUser.phone || prev.phone
+      }));
+    }
+    const defaultAddr = savedAddresses.find((a) => a.isDefault) || savedAddresses[0];
+    if (defaultAddr) {
+      setAddress((prev) => ({
+        ...prev,
+        fullName: defaultAddr.recipientName,
+        phone: defaultAddr.phone || prev.phone,
+        addressLine1: defaultAddr.addressLine1,
+        addressLine2: defaultAddr.addressLine2 || '',
+        city: defaultAddr.city,
+        state: defaultAddr.state,
+        pincode: defaultAddr.pincode,
+        country: defaultAddr.country
+      }));
+    }
+  }, [currentUser, savedAddresses]);
 
   // Payment Method State
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'CARD' | 'NETBANKING' | 'COD'>('UPI');
@@ -250,6 +277,46 @@ export const CheckoutPage: React.FC = () => {
           {step === 2 && (
             <div className="space-y-6 animate-in fade-in duration-300">
               <h3 className="font-serif font-bold text-xl text-[#2C221E]">Step 2: Shipping Address</h3>
+
+              {savedAddresses.length > 0 && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold text-[#C28E46] uppercase tracking-wider">
+                    Use a Saved Address
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {savedAddresses.map((sa) => (
+                      <button
+                        key={sa.id}
+                        type="button"
+                        onClick={() => {
+                          setAddress((prev) => ({
+                            ...prev,
+                            fullName: sa.recipientName,
+                            phone: sa.phone || prev.phone,
+                            addressLine1: sa.addressLine1,
+                            addressLine2: sa.addressLine2 || '',
+                            city: sa.city,
+                            state: sa.state,
+                            pincode: sa.pincode,
+                            country: sa.country
+                          }));
+                        }}
+                        className={`text-left p-3 rounded-xl border text-xs transition-all ${
+                          address.addressLine1 === sa.addressLine1
+                            ? 'border-[#C28E46] bg-[#C28E46]/10 text-[#2C221E] font-medium'
+                            : 'border-[#E6DFC6] bg-white hover:border-[#C28E46]'
+                        }`}
+                      >
+                        <div className="font-bold flex items-center justify-between">
+                          <span>{sa.recipientName}</span>
+                          {sa.isDefault && <span className="text-[10px] text-[#C28E46]">Default</span>}
+                        </div>
+                        <div className="text-stone-500 truncate">{sa.addressLine1}, {sa.city}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="sm:col-span-2">

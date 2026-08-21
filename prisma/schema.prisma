@@ -158,6 +158,7 @@ model Inventory {
   updatedAt DateTime @updatedAt
 
   reservations Reservation[]
+  adjustments  InventoryAdjustment[]
 
   @@index([productId])
 }
@@ -217,6 +218,9 @@ model CheckoutSession {
   email String?
   phone String?
 
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -224,6 +228,7 @@ model CheckoutSession {
   paymentAttempts PaymentAttempt[]
   order           Order?
 
+  @@index([customerId])
   @@index([status])
   @@index([expiresAt])
 }
@@ -315,6 +320,9 @@ model Order {
   email           String?
   phone           String?
 
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
   lines                OrderLine[]
   returns              ReturnRequest[]
   statusHistory        OrderStatusHistory[]
@@ -325,6 +333,7 @@ model Order {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@index([customerId])
   @@index([status])
 }
 
@@ -499,3 +508,103 @@ model OrderLine {
 
   @@index([orderId])
 }
+
+enum Role {
+  CUSTOMER
+  OPERATIONS
+  ADMIN
+}
+
+model Customer {
+  id           String            @id @default(uuid())
+  email        String            @unique
+  passwordHash String
+  name         String?
+  phone        String?
+  role         Role              @default(CUSTOMER)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  sessions     CustomerSession[]
+  orders       Order[]
+  checkouts    CheckoutSession[]
+  addresses    CustomerAddress[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model CustomerSession {
+  id         String   @id @default(uuid())
+  tokenHash  String   @unique
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([customerId])
+  @@index([expiresAt])
+}
+
+model CustomerAddress {
+  id            String   @id @default(uuid())
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  recipientName String
+  phone         String?
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  state         String
+  pincode       String
+  country       String   @default("India")
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([customerId])
+}
+
+enum InventoryAdjustmentReason {
+  MANUAL_CORRECTION
+  STOCK_RECEIPT
+  DAMAGE
+  RETURN_RESTOCK
+  CYCLE_COUNT
+}
+
+model InventoryAdjustment {
+  id             String                    @id @default(uuid())
+  inventoryId    String
+  inventory      Inventory                 @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  previousOnHand Int
+  quantityDelta  Int
+  newOnHand      Int
+  reason         InventoryAdjustmentReason
+  note           String?
+  actorId        String
+  actorEmail     String?
+  idempotencyKey String?                   @unique
+  createdAt      DateTime                  @default(now())
+
+  @@index([inventoryId])
+  @@index([actorId])
+  @@index([createdAt])
+}
+
+model AdminAuditLog {
+  id         String   @id @default(uuid())
+  actorId    String
+  actorEmail String?
+  actorRole  String
+  action     String
+  targetType String
+  targetId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([actorId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+}
+

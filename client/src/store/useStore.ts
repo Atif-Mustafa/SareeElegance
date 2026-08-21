@@ -13,6 +13,9 @@ import {
 import { mockProducts, currencyRates } from '@/features/catalog/data/mockData';
 import { LanguageCode, t as translateHelper } from '../lib/i18n';
 import { cartApi } from '@/features/cart/api/cart.api';
+import { authApi } from '@/features/auth/api/auth.api';
+import { customerApi } from '@/features/account/api/customer.api';
+import { CustomerDto, CustomerAddressDto } from '../../../shared/contracts/auth/auth.dto';
 
 interface Toast {
   id: string;
@@ -89,6 +92,19 @@ interface StoreState {
   openGlossaryModal: (term?: string) => void;
 
   // Account / Profiles / Orders
+  currentUser: CustomerDto | null;
+  setCurrentUser: (user: CustomerDto | null) => void;
+  isAuthModalOpen: boolean;
+  authModalMode: 'login' | 'register';
+  openAuthModal: (mode?: 'login' | 'register') => void;
+  closeAuthModal: () => void;
+  fetchCurrentUser: () => Promise<void>;
+  logoutUser: () => Promise<void>;
+  savedAddresses: CustomerAddressDto[];
+  fetchAddresses: () => Promise<void>;
+  serverOrders: any[];
+  isServerOrdersLoading: boolean;
+  fetchServerOrders: () => Promise<void>;
   userOrders: Order[];
   placeOrder: (orderData: Omit<Order, 'orderId' | 'date'>) => Order;
   initializeCheckout: (address?: any) => Promise<any>;
@@ -634,6 +650,63 @@ export const useStore = create<StoreState>((set, get) => ({
     get().clearCart();
     get().addToast(`Order ${newOrder.orderId} successfully placed!`, 'success');
     return newOrder;
+  },
+
+  // Account / Profiles / Orders
+  currentUser: null,
+  setCurrentUser: (currentUser) => set({ currentUser }),
+  isAuthModalOpen: false,
+  authModalMode: 'login',
+  openAuthModal: (authModalMode = 'login') => set({ isAuthModalOpen: true, authModalMode }),
+  closeAuthModal: () => set({ isAuthModalOpen: false }),
+
+  fetchCurrentUser: async () => {
+    try {
+      const data = await authApi.getMe();
+      if (data?.customer) {
+        set({ currentUser: data.customer });
+        get().fetchAddresses();
+        get().fetchServerOrders();
+      } else {
+        set({ currentUser: null, serverOrders: [], savedAddresses: [] });
+      }
+    } catch {
+      set({ currentUser: null, serverOrders: [], savedAddresses: [] });
+    }
+  },
+
+  logoutUser: async () => {
+    try {
+      await authApi.logout();
+      set({ currentUser: null, serverOrders: [], savedAddresses: [] });
+      get().addToast('Signed out of your account', 'info');
+    } catch (e) {
+      set({ currentUser: null, serverOrders: [], savedAddresses: [] });
+    }
+  },
+
+  savedAddresses: [],
+  fetchAddresses: async () => {
+    try {
+      if (!get().currentUser) return;
+      const data = await customerApi.getAddresses();
+      set({ savedAddresses: data.addresses });
+    } catch {
+      // Ignored if unauthenticated
+    }
+  },
+
+  serverOrders: [],
+  isServerOrdersLoading: false,
+  fetchServerOrders: async () => {
+    try {
+      if (!get().currentUser) return;
+      set({ isServerOrdersLoading: true });
+      const data = await customerApi.getOrders(1, 20);
+      set({ serverOrders: data.orders, isServerOrdersLoading: false });
+    } catch {
+      set({ isServerOrdersLoading: false });
+    }
   },
 
   blouseProfiles: defaultBlouseProfiles,

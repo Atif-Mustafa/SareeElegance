@@ -12,7 +12,7 @@ checkoutRouter.post('/', async (req: Request, res: Response, next: NextFunction)
       return next(ApiError.badRequest('Invalid checkout request: ' + parseResult.error.message, 'VALIDATION_ERROR'));
     }
 
-    const session = await checkoutService.createCheckout(parseResult.data);
+    const session = await checkoutService.createCheckout(parseResult.data, req.customer?.id);
     res.status(201).json(session);
   } catch (error) {
     next(error);

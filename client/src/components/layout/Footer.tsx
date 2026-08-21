@@ -247,6 +247,10 @@ export const Footer: React.FC = () => {
             <Link to="/shipping-policy" className="hover:text-[#D4AF37] transition-colors">Shipping Policy</Link>
             <span>•</span>
             <Link to="/terms-and-conditions" className="hover:text-[#D4AF37] transition-colors">Terms of Service</Link>
+            <span>•</span>
+            <Link to="/admin" className="text-amber-400 hover:text-amber-200 font-semibold transition-colors flex items-center gap-1">
+              <span>Ops Console</span>
+            </Link>
           </div>
         </div>
 
